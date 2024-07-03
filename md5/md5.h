@@ -4,31 +4,17 @@
 #include <Files.h>
 #include <Memory.h>
 
-typedef struct{
-	uint64_t size;			// Size of input in bytes
-	uint32_t buffer[4];		// Current accumulation of hash
-	uint8_t input[64];		// Input to be used in the next step
-	uint8_t digest[16];		// Result of algorithm
-}MD5Context;
+typedef unsigned int MD5_u32plus;
 
-void md5Init(MD5Context *ctx);
-void md5Update(MD5Context *ctx, uint8_t *input, uint32_t input_len);
-void md5Finalize(MD5Context *ctx);
-void md5Step(uint32_t *buffer, uint32_t *input);
+typedef struct {
+    MD5_u32plus lo, hi;
+    MD5_u32plus a, b, c, d;
+    unsigned char buffer[64];
+    MD5_u32plus block[16];
+} MD5_CTX;
+
+static void MD5_Init(MD5_CTX *ctx);
+static void MD5_Update(MD5_CTX *ctx, const void *data, unsigned long size);
+static void MD5_Final(unsigned char *result, MD5_CTX *ctx);
 
 short md5MacFile(short refNum, uint8_t *result);
-
-#define ROL(x, n) \
-    ((x << n) | (x >> (32 - n)))
-
-#define F(X, Y, Z) \
-    ((X & Y) | (~X & Z))
-    
-#define G(X, Y, Z) \
-    ((X & Z) + (Y & ~Z))
-    
-#define H(X, Y, Z) \
-    (X ^ Y ^ Z)
-
-#define I(X, Y, Z) \
-    (Y ^ (X | ~Z))
