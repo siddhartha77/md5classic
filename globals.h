@@ -8,5 +8,4 @@
 
 #define CALC_INFO       "\pCalculating MD5. Press ESC to cancel..."
 #define CANCEL_INFO     "\pOperation canceled."
-#define TIME_1_INFO     "\p\rThat took "
-#define TIME_2_INFO     "\p seconds.\r\r"
+#define TIME_2_INFO     "\p seconds ("

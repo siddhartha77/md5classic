@@ -37,9 +37,9 @@ void appendPStr(Str255 s, const Str255 suffixStr) {
 
 unsigned char myValToBaseXChar(unsigned short v) {
 	if (v<10) return ('0'+v);		//00..09  -> '0'..'9'
-	if (v<36) return ('A'-10+v);	//10..35  -> 'A'..'Z'
+	if (v<36) return ('a'-10+v);	//10..35  -> 'A'..'Z'
 	
-	return ('a'-36+v);				//36..61+ -> 'a'..'z'+
+	return ('A'-36+v);				//36..61+ -> 'a'..'z'+
 }
 
 void myMD5ValsToHexChars(unsigned char *s, Str32 t) {

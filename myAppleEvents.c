@@ -32,6 +32,7 @@ pascal OSErr HandleODOC(AppleEvent *appleEvent, AppleEvent *aeReply, long handle
 #pragma unused (handlerRefcon)	
 #pragma unused (aeReply)
 	FSSpec		    myFSS;
+	SFReply         sfReply;
 	AEDescList	    docList;
 	Size		    actualSize;
 	AEKeyword	    keywd;
@@ -52,12 +53,14 @@ pascal OSErr HandleODOC(AppleEvent *appleEvent, AppleEvent *aeReply, long handle
         
         if (err) return err;
         
-        /* ProcessFile() uses the ancient FSOpen routine. It's expecting an SFReply.vRefNum,
-           which is actually a working directory reference number, not a volume reference number */
-	    OpenWD(myFSS.vRefNum, myFSS.parID, NULL, &wdRefNum);	    
-	    ProcessFile(myFSS.name, wdRefNum);
+        /* SFReply.vRefNum is actually a working directory reference number, not a volume reference number */
+	    OpenWD(myFSS.vRefNum, myFSS.parID, NULL, &wdRefNum);
+	    sfReply.vRefNum = wdRefNum;
+	    sfReply.version = 0;
+	    BlockMove(myFSS.name, sfReply.fName, myFSS.name[0] + 1);
+	    ProcessFile(&sfReply);
 	}
-		
+	
 	AEDisposeDesc(&docList);
 
 	return err;

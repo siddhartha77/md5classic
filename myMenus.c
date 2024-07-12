@@ -98,7 +98,7 @@ void DoOpen() {
     TESetSelect((*gTEHndl)->teLength, (*gTEHndl)->teLength, gTEHndl);
         
     if (reply.good) {
-        ProcessFile(reply.fName, reply.vRefNum);
+        ProcessFile(&reply);
     } else {
         /* User cancelled. */
     }

@@ -1,20 +1,23 @@
 #include <stdint.h>
 
+#include <Devices.h>
 #include <Events.h>
-#include <Files.h>
 #include <Memory.h>
 
-typedef unsigned int MD5_u32plus;
+#define MD5_DIGEST_SIZE 16
 
 typedef struct {
-    MD5_u32plus lo, hi;
-    MD5_u32plus a, b, c, d;
-    unsigned char buffer[64];
-    MD5_u32plus block[16];
-} MD5_CTX;
+    uint32_t buf[4];
+    uint32_t bits[2];
+    unsigned char in[64];
+} MD5Context;
 
-static void MD5_Init(MD5_CTX *ctx);
-static void MD5_Update(MD5_CTX *ctx, const void *data, unsigned long size);
-static void MD5_Final(unsigned char *result, MD5_CTX *ctx);
 
-short md5MacFile(short refNum, uint8_t *result);
+static void MD5Init(MD5Context *ctx);
+static void MD5Update(MD5Context *ctx, const void *buf, unsigned len);
+static void MD5Transform(register uint32_t buf[4], register uint32_t in[16]);
+static void MD5Final(unsigned char digest[MD5_DIGEST_SIZE], MD5Context *ctx);
+
+short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result);
+static void SetupParamBlk(ParmBlkPtr pbReadBlkPtr, ParmBlkPtr pbOpenBlkPtr, long bufferSize);
+static void DestroyParamBlk(ParmBlkPtr pbPtr);

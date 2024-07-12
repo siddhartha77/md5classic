@@ -62,19 +62,21 @@ void PrintError(OSErr err) {
     }
 }
 
-void ProcessFile(Str63 fName, short vRefNum) {
+void ProcessFile(SFReply *replyPtr) {
+    ParamBlockRec   paramBlk;
     Str63           processingPStr = CALC_INFO;
     Str32           md5HexResult = CANCEL_INFO;
-    Str32           thatTookPStr = TIME_1_INFO;
     Str32           secondsPStr = TIME_2_INFO;
+    Str32           bytesPerSecondPStr;
     Str15           fileSizePStr;
     Str15           timerPStr;
     CursHandle      watchCurs;
     OSErr           err;
     unsigned long   startTime;
     unsigned long   endTime;
+    unsigned long   diffTime;
     long            logEOF;
-    short           refNum;
+    long            bytesPerSecond;
     short           result;
     unsigned char   md5Result[16];
     
@@ -83,11 +85,18 @@ void ProcessFile(Str63 fName, short vRefNum) {
     /* Set the cursor to the end of the text */
     TESetSelect((*gTEHndl)->teLength, (*gTEHndl)->teLength, gTEHndl);
     
-    err = FSOpen(fName, vRefNum, &refNum);    
+    paramBlk.ioParam.ioCompletion = NULL;
+    paramBlk.ioParam.ioNamePtr = replyPtr->fName;
+    paramBlk.ioParam.ioVRefNum = replyPtr->vRefNum;
+    paramBlk.ioParam.ioVersNum = replyPtr->version;
+    paramBlk.ioParam.ioPermssn = fsRdPerm;
+    paramBlk.ioParam.ioMisc = NULL;
+    
+    err = PBOpen(&paramBlk, false);    
     TEUpdate(&gWinPtr->portRect, gTEHndl);     
-    GetEOF(refNum, &logEOF);
+    GetEOF(paramBlk.ioParam.ioRefNum, &logEOF);
     NumToString(logEOF, fileSizePStr);
-    TEInsert(fName + 1, fName[0], gTEHndl);
+    TEInsert(replyPtr->fName + 1, replyPtr->fName[0], gTEHndl);
     TEInsert(" (", 2, gTEHndl);
     TEInsert(fileSizePStr + 1, fileSizePStr[0], gTEHndl);        
     TEInsert(" bytes)\r", 8, gTEHndl);
@@ -103,7 +112,7 @@ void ProcessFile(Str63 fName, short vRefNum) {
         GetDateTime(&startTime);
 
         /* Do the MD5 calculation */
-        result = md5MacFile(refNum, md5Result);
+        result = MD5MacFile(&paramBlk, md5Result);
         
         if (result) {
             myMD5ValsToHexChars(md5Result, md5HexResult);
@@ -118,9 +127,21 @@ void ProcessFile(Str63 fName, short vRefNum) {
         TEInsert(md5HexResult + 1, md5HexResult[0], gTEHndl);
         
         if (gDebug && result) {
-            TEInsert(thatTookPStr + 1, thatTookPStr[0], gTEHndl);
+            TEInsert("\r", 1, gTEHndl);
             TEInsert(timerPStr + 1, timerPStr[0], gTEHndl);
             TEInsert(secondsPStr + 1, secondsPStr[0], gTEHndl);
+            
+            diffTime = endTime - startTime;
+            
+            if (diffTime > 0) {
+                bytesPerSecond = logEOF / diffTime;
+            } else {
+                bytesPerSecond = logEOF;
+            }
+                
+            NumToString(bytesPerSecond, bytesPerSecondPStr);
+            TEInsert(bytesPerSecondPStr + 1, bytesPerSecondPStr[0], gTEHndl);
+            TEInsert(" bytes/sec)\r\r", 13, gTEHndl);            
         } else {
             TEInsert("\r\r", 2, gTEHndl);
         }
@@ -276,6 +297,9 @@ void MainEventLoop() {
 int main() {
     long    aLong;
     
+    MaxApplZone();
+    MoreMasters();
+    MoreMasters();
     InitToolbox();    
     SetupMenus();    
     SetupWindow();        
