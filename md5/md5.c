@@ -249,8 +249,8 @@ static void MD5Transform(register uint32_t buf[4], register uint32_t in[16]) {
         add         rData, rData, rResult;      \
         /* Call the MD5 function */             \
         F           (x, y, z)                   \
-        add         w, w, rResult;              \
         add         w, w, rData;                \
+        add         w, w, rResult;              \
         rlwinm      w, w, s, 0, 31;             \
         add         w, w, x;
 
@@ -476,7 +476,7 @@ static void MD5Final(unsigned char digest[16], MD5Context *ctx) {
 }
 
 short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result) {
-	/*EventRecord event;*/
+	/* EventRecord event; */
     ParmBlkPtr  currPBPtr;
     ParmBlkPtr  pbPtr[2];
 	MD5Context  ctx;
@@ -507,7 +507,8 @@ short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result) {
 	    
 	    /* Checksum the data */   
         MD5Update(&ctx, (unsigned char *)currPBPtr->ioParam.ioBuffer, currPBPtr->ioParam.ioActCount);
-
+        
+        /* Uncomment to allow cancelling */
         /*if (GetNextEvent(keyDownMask, &event)) {
             switch (event.what) {
                 case keyDown:

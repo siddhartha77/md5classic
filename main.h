@@ -1,6 +1,7 @@
 #include <AppleEvents.h>
 #include <Controls.h>
 #include <Dialogs.h>
+#include <DiskInit.h>
 #include <Events.h>
 #include <Files.h>
 #include <MacTypes.h>
@@ -12,12 +13,40 @@
 #include <TextEdit.h>
 #include <Windows.h>
 
-extern WindowPtr       gWinPtr;
+enum {
+    kWindowVisible      = true,
+    kWindowGoAway       = true
+};
+
+/* Resource IDs */
+enum {
+    kConfirmDialogResID             = 129,
+    kConfirmDialogButtonOK          = 1,
+    kConfirmDialogButtonCancel      = 2,
+    kConfirmDialogButtonDontSave    = 3
+};
 
 void InitToolbox(void);
-void SetupWindow(void);
+void DoOpen(void);
+Boolean DoSaveAs(void);
+void DoQuit(void);
+void RestartProc(void);
+WindowPtr SetupWindow(void);
 void ProcessFile(SFReply *replyPtr);
+void AutoSaveHash(ParmBlkPtr processedFileParamBlkPtr, unsigned char *md5HexResult);
 void PrintError(OSErr err);
-void MainEventLoop(void);
+void SetupSaveParamBlock(ParmBlkPtr paramBlkPtr);
+OSErr PBSetTypeCreator(ParmBlkPtr paramBlkPtr, OSType fileType, OSType fileCreator);
+void EventLoop(void);
+void DoActivate(WindowPtr winPtr, Boolean becomingActive);
+void DoIdle(void);
+Boolean IsAppWindow(WindowPtr winPtr);
+void DoContentClick(WindowPtr winPtr, EventRecord event);
+void DoUpdate(WindowPtr winPtr);
+void GetLocalUpdateRgn(WindowPtr winPtr, RgnHandle localRgn);
+void DoGrowWindow(WindowPtr winPtr, EventRecord *event);
+void DoZoomWindow(WindowPtr winPtr, short part);
+void DoResizeWindow(WindowPtr winPtr);
+void ExitApplication(void);
 
 int main(void);

@@ -1,13 +1,16 @@
 #include "main.h"
 #include "globals.h"
 #include "myMenus.h"
+#include "prefs.h"
 #include "myTextEdit.h"
 #include "utils.h"
 
+/* Setup the menus. These are pulled in from the resource file. */
 void SetupMenus(void) {
     MenuHandle  appleMenuHndl;
     MenuHandle  fileMenuHndl;
     MenuHandle  editMenuHndl;
+    MenuHandle  prefsMenuHndl;
     
     appleMenuHndl = GetMenu(kAppleMenuResID);
     AppendResMenu(appleMenuHndl, kAppleMenuDAType);
@@ -19,17 +22,28 @@ void SetupMenus(void) {
     editMenuHndl = GetMenu(kEditMenuResID);
     InsertMenu(editMenuHndl, 0);
     
+    prefsMenuHndl = GetMenu(kPrefsMenuResID);
+    InsertMenu(prefsMenuHndl, 0);
+            
+    CheckItem(prefsMenuHndl, kPrefsMenuAskToSave, gPrefs.askToSave);
+    CheckItem(prefsMenuHndl, kPrefsMenuAutosaveHash, gPrefs.autosaveHash);
+    CheckItem(prefsMenuHndl, kPrefsMenuUppercaseHash, gPrefs.uppercaseHash);
+    CheckItem(prefsMenuHndl, kPrefsMenuVerbose, gPrefs.verbose);
+    
     DrawMenuBar();
 }
 
+/* Handle menu clicks. */
 void DoMenu(long menuResult) {
-    Str255      itemName;
-    GrafPtr     currentPort;
-    short       menuID;
-    short       menuItem;
+    Str255          itemName;
+    GrafPtr         currentPort;
+    MenuHandle      menuHndl;
+    CharParameter   menuItemMark;
+    short           menuID;
+    short           menuItem;
     
-    menuID = HIWORD(menuResult);
-    menuItem = LOWORD(menuResult);
+    menuID = HiWord(menuResult);
+    menuItem = LoWord(menuResult);
     
     switch (menuID) {
         case kAppleMenuResID :
@@ -55,6 +69,10 @@ void DoMenu(long menuResult) {
                     DoOpen();
                     
                     break;
+                case kFileMenuClose:
+                    DoQuit();
+                    
+                    break;
                 case kFileMenuSaveAs:
                     DoSaveAs();
                     
@@ -70,70 +88,47 @@ void DoMenu(long menuResult) {
         case kEditMenuResID:
             switch (menuItem) {
                 case kEditMenuCopy:
-                    TECopy(gTEHndl);
+                    TECopy(((DocumentPeek)FrontWindow())->teHndl);
                     ZeroScrap();
                     TEToScrap();
                     
                     break;                    
                 case kEditMenuSelectAll:
-                    TESetSelect(0, (*gTEHndl)->teLength, gTEHndl);
+                    TESetSelect(0, (*((DocumentPeek)FrontWindow())->teHndl)->teLength, ((DocumentPeek)FrontWindow())->teHndl);
                     
                     break;
             }
             
             break;
+            
+        case kPrefsMenuResID:
+            menuHndl = GetMenu(kPrefsMenuResID);
+            GetItemMark(menuHndl, menuItem, &menuItemMark);
+            CheckItem(menuHndl, menuItem, (menuItemMark == noMark));
+            
+            switch (menuItem) {
+                case kPrefsMenuAskToSave:
+                    gPrefs.askToSave = (menuItemMark == noMark);
+                
+                    break;
+                case kPrefsMenuAutosaveHash:
+                    gPrefs.autosaveHash = (menuItemMark == noMark);
+                
+                    break;
+                case kPrefsMenuUppercaseHash:
+                    gPrefs.uppercaseHash = (menuItemMark == noMark);
+                
+                    break;
+                case kPrefsMenuVerbose:
+                    gPrefs.verbose = (menuItemMark == noMark);
+                
+                    break;
+            }
+            
+            SavePreferences();
+            
+            break;
     }
     
     HiliteMenu(0);
-}
-
-void DoOpen() {
-    SFReply         reply;
-    Point           where;
-    
-    SetPt(&where, 30, 30);    
-    SFGetFile(where, NULL, NULL, -1, NULL, NULL, &reply);
-    
-    /* Set the cursor to the end of the text */
-    TESetSelect((*gTEHndl)->teLength, (*gTEHndl)->teLength, gTEHndl);
-        
-    if (reply.good) {
-        ProcessFile(&reply);
-    } else {
-        /* User cancelled. */
-    }
-}
-
-void DoSaveAs() {
-    SFReply         reply;
-    ParamBlockRec   paramBlock;
-    Point           where;
-    OSErr           err;
-    long            len;
-    short           refNum;
-    
-    SetPt(&where, 30, 30);    
-    SFPutFile(where, SAVE_PROMPT, ORIG_SAVENAME, NULL, &reply);
-        
-    if (reply.good) {
-        paramBlock.ioParam.ioNamePtr = reply.fName;
-        paramBlock.ioParam.ioVRefNum = reply.vRefNum;
-        paramBlock.ioParam.ioVersNum = reply.version;
-        
-        err = PBCreate(&paramBlock, 0);
-    
-        err = FSOpen(reply.fName, reply.vRefNum, &refNum);
-        len = (*gTEHndl)->teLength;
-        err = FSWrite(refNum, &len, *(*gTEHndl)->hText);
-        err = FSClose(refNum);
-    } else {
-        /* User cancelled. */
-    }
-}
-
-void DoQuit() {
-    TEDispose(gTEHndl);    
-    DisposeWindow(gWinPtr);
-    
-    ExitToShell();
 }

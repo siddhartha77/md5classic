@@ -1,12 +1,19 @@
 #include <Controls.h>
 #include <Memory.h>
+#include <MixedMode.h>
+#include <OSUtils.h>
 #include <TextEdit.h>
 #include <Windows.h>
 
-extern TEHandle        gTEHndl;
+enum {
+    /* Delay in ticks so scrolling isn't crazy fast. */
+    kClickLoopScrollDelay   = 2
+};
 
-TEHandle SetupTE(WindowPtr winPtr);
-void ScrollContents(TEHandle textHndl, short dh, short dv);
-void UpdateText(TEHandle textHndl);
-void ChangeMouse(TEHandle textHndl);
+void SetupTE(WindowPtr winPtr);
+void GetTERect(WindowPtr winPtr, Rect *teRect);
+void AdjustViewRect(TEHandle teHandl);
+void AdjustTE(WindowPtr winPtr);
+void UpdateTEWordWrap(WindowPtr winPtr);
+void ChangeMouse(TEHandle teHndl);
 pascal Boolean ClickLoop(void);

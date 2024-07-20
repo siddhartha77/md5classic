@@ -3,94 +3,120 @@
 #include "myScrollBars.h"
 #include "myTextEdit.h"
 
-TEHandle        gTEHndl = NULL;
+TEClickLoopUPP  gSavedClickLoopUPP = NULL;
 
-TEHandle SetupTE(WindowPtr winPtr) {
+/* Setup the TextEditControl and enable word wrap. */
+void SetupTE(WindowPtr winPtr) {
     Rect            destRect;
     Rect            viewRect;
+    DocumentPeek    docPtr;
+    TEPtr           tePtr;
     
     SetPort(winPtr);
     TextFont(applFont);
-    TextSize(9);
+    TextSize(9);    
+    GetTERect(winPtr, &viewRect);
+    destRect = viewRect;
+    docPtr = (DocumentPeek)winPtr;
     
-    /* Get TextEdit bounds and account for scrollbars */
-    viewRect = winPtr->portRect;
-    viewRect.top += kScrollBarHeight;
-    viewRect.right -= kScrollBarWidth;
-    viewRect.bottom -= kScrollBarHeight;
-    viewRect.left += kScrollBarWidth;
-    BlockMove(&viewRect, &destRect, sizeof(Rect));    
-    gTEHndl = TENew(&destRect, &viewRect);
-    SetWRefCon(winPtr, (long)gTEHndl);
-    (*gTEHndl)->clickLoop = NewTEClickLoopUPP(ClickLoop);
-    TEScroll(0, 0, gTEHndl);
-    TEUpdate(&winPtr->portRect, gTEHndl);
-    TEActivate(gTEHndl);
+    docPtr->teHndl = TENew(&destRect, &viewRect);
+    tePtr = *docPtr->teHndl;
     
-    return gTEHndl;
+    /* Enable word wrap */
+    tePtr->crOnly = +1;
+    
+    /* ClickLoop is used to move the thumb in the scrollbar when
+       highlighting text outside of the current view. */
+    gSavedClickLoopUPP = tePtr->clickLoop;
+    tePtr->clickLoop = NewTEClickLoopUPP(ClickLoop);
+    TEScroll(0, 0, docPtr->teHndl);
+    TEUpdate(&tePtr->viewRect, docPtr->teHndl);
+    TEActivate(docPtr->teHndl);
 }
 
+    
+/* All this does is automatically redraw the scrollbar thumb */   
 pascal Boolean ClickLoop() {
-    RgnHandle   oldClip;
-    WindowPtr   winPtr;
-    GrafPtr     oldPort;
-    TEPtr       textPtr;
-    Rect        tempRect;
-    Rect        *viewRect, *destRect;
-    Point       mousePt;
-    short       scrollAmount = 0;
-    short       viewWidth, lineHeight, destBottom;
+    RgnHandle       savedClip;
+    WindowPtr       winPtr;
+    DocumentPeek    docPtr;
+    GrafPtr         savedPort;
+    TEPtr           tePtr;
+    Rect            *viewRect, *destRect;
+    Point           mousePt;
+    short           scrollAmount = 0;
+    short           viewWidth, lineHeight, destBottom;
     
-    HLock((Handle)gTEHndl);
-    textPtr = *gTEHndl;
+    /* Call the saved ClickLoop function */
+#ifdef __POWERPC__
+    CallUniversalProc(gSavedClickLoopUPP, kPascalStackBased);
+#endif
+
+#ifdef __MC68K__
+    gSavedClickLoopUPP();
+#endif
     
-    /* All this does is automatically redraw the scroll bar thumb */
+    /* Get the window's graphics port */
     winPtr = FrontWindow();
-    GetPort(&oldPort);
+    GetPort(&savedPort);
     SetPort(winPtr);
-    oldClip = NewRgn();
-    GetClip(oldClip);
-    SetRect(&tempRect, -32767, -32767, 32767, 32767);
-    ClipRect(&tempRect);
+    docPtr = (DocumentPeek)winPtr;
+    HLock((Handle)docPtr->teHndl);
+    tePtr = *docPtr->teHndl;
     
-    viewRect = &textPtr->viewRect;
-    destRect = &textPtr->destRect;
-    lineHeight = textPtr->lineHeight;
+    /* Save the old clipping region */
+    savedClip = NewRgn();
+    GetClip(savedClip);
+    
+    /* Set a new clipping region to the entire window port */  
+    ClipRect(&winPtr->portRect);
+    
+    viewRect = &tePtr->viewRect;
+    destRect = &tePtr->destRect;
+    lineHeight = tePtr->lineHeight;
     viewWidth = viewRect->right - viewRect->left;
     
     GetMouse(&mousePt);
     
     if (!PtInRect(mousePt, viewRect)) {
-        if (mousePt.v > winPtr->portRect.bottom) {
+        if (mousePt.v > viewRect->bottom) {
             scrollAmount = -1;
-            SetScrollBarValue(vScrollHndl, &scrollAmount);            
-            destBottom = destRect->top + textPtr->nLines * lineHeight;
-            if (viewRect->bottom < destBottom + kScrollBarHeight) TEScroll(0, -1, gTEHndl);
+            ScrollbarAction(docPtr->vScrollHndl, &scrollAmount);
+            destBottom = destRect->top + tePtr->nLines * lineHeight;
+            
+            if (viewRect->bottom < destBottom + kScrollBarHeight) {            
+                /* Small delay so scrolling isn't so fast */
+                Delay(kClickLoopScrollDelay, NULL);
+                TEScroll(0, scrollAmount * tePtr->lineHeight, docPtr->teHndl);
+            }
         } else if ((mousePt.v < viewRect->top) && (viewRect->top > destRect->top)) {
             scrollAmount = 1;
-            SetScrollBarValue(vScrollHndl, &scrollAmount);            
-            TEScroll(0, 1, gTEHndl);
+            ScrollbarAction(docPtr->vScrollHndl, &scrollAmount);
+            
+            /* Small delay so scrolling isn't so fast */
+            Delay(kClickLoopScrollDelay, NULL);
+            TEScroll(0, scrollAmount * tePtr->lineHeight, docPtr->teHndl);
         }
     }
     
-    SetClip(oldClip);
-    DisposeRgn(oldClip);
-    SetPort(oldPort);
-    
-    textPtr->clickTime = TickCount();    
-    HUnlock((Handle)gTEHndl);
+    /* Restore the saved clipping region */
+    SetClip(savedClip);
+    DisposeRgn(savedClip);
+    SetPort(savedPort);    
+    HUnlock((Handle)docPtr->teHndl);
     
     return true;
 }
 
-void ChangeMouse(TEHandle textHndl) {
+/* Change the mouse to an iBeam when it's over the TextEdit control. */
+void ChangeMouse(TEHandle teHndl) {
     Point       mousePt;
     CursHandle  iBeam;
     
-    if (FrontWindow() == (WindowPtr)((*textHndl)->inPort)) {
+    if (FrontWindow() == (WindowPtr)((*teHndl)->inPort)) {
         GetMouse(&mousePt);
         
-        if (PtInRect(mousePt, &(*textHndl)->viewRect)) {
+        if (PtInRect(mousePt, &(*teHndl)->viewRect)) {
             iBeam = GetCursor(iBeamCursor);
             SetCursor(*iBeam);
         } else {
@@ -99,23 +125,59 @@ void ChangeMouse(TEHandle textHndl) {
     }
 }
 
-void ScrollContents(TEHandle textHndl, short dh, short dv) {
-    RgnHandle   updateRgn;
-    
-    updateRgn = NewRgn();
-    TEScroll(dh, dv, textHndl);
-    ScrollRect(&lowerRect, dh, dv, updateRgn);
-    DisposeRgn(updateRgn);    
-    UpdateText(textHndl);
+/* Return a rectangle that is inset from the portRect by the size of
+   the scrollbars and a little extra margin. */
+void GetTERect(WindowPtr winPtr, Rect *teRect) {
+	*teRect = winPtr->portRect;
+	
+	/* adjust for margin */
+	InsetRect(teRect, kTextMargin, kTextMargin);
+	
+	/* and for the scrollbars */
+	teRect->bottom = teRect->bottom - kScrollBarHeight;
+	teRect->right = teRect->right - kScrollBarWidth;
 }
 
-void UpdateText(TEHandle textHndl) {
-    RgnHandle   updateRgn;
-    
-    HLock((Handle)textHndl);
-    updateRgn = NewRgn();
-    TEUpdate(&(**textHndl).viewRect, textHndl);
-    DrawControls((WindowPtr)((*textHndl)->inPort));
-    DisposeRgn(updateRgn);  
-    HUnlock((Handle)textHndl); 
+/* Update the TERec's view rect so that it is the greatest multiple of
+   the lineHeight that still fits in the old viewRect. */
+void AdjustViewRect(TEHandle teHndl) {
+	TEPtr		tePtr;
+	
+	tePtr = *teHndl;
+	tePtr->viewRect.bottom = (((tePtr->viewRect.bottom - tePtr->viewRect.top) / tePtr->lineHeight)
+							* tePtr->lineHeight) + tePtr->viewRect.top;
+}
+
+/* Scroll the TERec around to match up to the potentially updated scrollbar
+   values. This is really useful when the window has been resized such that the
+   scrollbars became inactive but the TERec was already scrolled. */
+void AdjustTE(WindowPtr winPtr) {
+    DocumentPeek    docPtr;
+	TEPtr		    tePtr;
+	
+	docPtr = (DocumentPeek)winPtr;
+	tePtr = *docPtr->teHndl;
+	
+	TEScroll((tePtr->viewRect.left - tePtr->destRect.left) -
+			GetControlValue(docPtr->hScrollHndl),
+			(tePtr->viewRect.top - tePtr->destRect.top) -
+				(GetControlValue(docPtr->vScrollHndl) *
+				tePtr->lineHeight),
+			docPtr->teHndl);
+}
+
+/* When the window is resized, recalculate the TextEdit fields.
+  This needs to be called before updating the scrollbars. */
+void UpdateTEWordWrap(WindowPtr winPtr) {
+    DocumentPeek    docPtr;
+	TEPtr		    tePtr;
+
+    docPtr = (DocumentPeek)winPtr;
+	tePtr = *docPtr->teHndl;
+	GetTERect(winPtr, &tePtr->viewRect);
+	
+	/* Only update the width of the destRect
+	   since that's all word wrapping cares about. */
+	tePtr->destRect.right = tePtr->viewRect.right;	
+	TECalText(docPtr->teHndl);
 }

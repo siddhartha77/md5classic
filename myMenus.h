@@ -5,6 +5,7 @@
 #include <Menus.h>
 #include <Scrap.h>
 #include <StandardFile.h>
+#include <ToolUtils.h>
 
 enum {
     kAboutBoxResID      = 128
@@ -13,7 +14,8 @@ enum {
 enum {
     kAppleMenuResID     = 1,
     kFileMenuResID,
-    kEditMenuResID
+    kEditMenuResID,
+    kPrefsMenuResID
 };
 
 enum {
@@ -26,8 +28,9 @@ enum {
 
 enum {
     kFileMenuOpen       = 1,
-    kFileMenuSaveAs     = 3,
-    kFileMenuQuit       = 5
+    kFileMenuClose      = 3,
+    kFileMenuSaveAs     = 4,
+    kFileMenuQuit       = 6
 };
 
 enum {
@@ -36,8 +39,12 @@ enum {
     kEditMenuSelectAll  = 6
 };
 
+enum {
+    kPrefsMenuAskToSave     = 1,
+    kPrefsMenuAutosaveHash,
+    kPrefsMenuUppercaseHash,
+    kPrefsMenuVerbose
+};
+
 void SetupMenus(void);
 void DoMenu(long menuResult);
-void DoOpen(void);
-void DoSaveAs(void);
-void DoQuit(void);

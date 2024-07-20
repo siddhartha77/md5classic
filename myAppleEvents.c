@@ -4,11 +4,13 @@
 
 AEEventHandlerUPP   ODOCHandlerUPP;
 
+/* Install the event handler procs. */
 void InitAppleEvents()  {
 	ODOCHandlerUPP = NewAEEventHandlerProc(HandleODOC);
 	AEInstallEventHandler(kCoreEventClass, kAEOpenDocuments, ODOCHandlerUPP, 0, false);
 }
 
+/* Check if the required Apple Event parameters are set. */
 OSErr GotRequiredParams (AppleEvent *theAppleEvent) {
 	DescType	typeCode;
 	Size		actualSize;
@@ -28,6 +30,7 @@ OSErr GotRequiredParams (AppleEvent *theAppleEvent) {
 	return retErr;
 }
 
+/* OpenDocument (via drag and drop) Apple Event handler. Support is included for multiple files. */
 pascal OSErr HandleODOC(AppleEvent *appleEvent, AppleEvent *aeReply, long handlerRefcon) {
 #pragma unused (handlerRefcon)	
 #pragma unused (aeReply)

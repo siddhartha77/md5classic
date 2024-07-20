@@ -1,8 +1,13 @@
 #include <Controls.h>
+#include <ToolUtils.h>
 
 enum {
     kScrollBarHeight = 15,
     kScrollBarWidth = 15
+};
+
+enum {
+    kScrollBarBottomMargin = 10
 };
 
 enum {
@@ -19,12 +24,11 @@ enum {
     inThumb             = 129
 };
 
-extern Rect            lowerRect;
-extern Rect            vScrollRect, hScrollRect;
-extern ControlHandle   vScrollHndl, hScrollHndl;
-extern short           startValue, endValue;
-
 void SetupScrollBars(WindowPtr winPtr);
+void AdjustHV(Boolean isVert, ControlHandle controlHndl, TEHandle teHandl,Boolean canRedraw);
+void AdjustScrollValues(WindowPtr winPtr, Boolean canRedraw);
+void AdjustScrollSizes(WindowPtr winPtr);
+void AdjustScrollBars(WindowPtr winPtr, Boolean needsResize);
 pascal void ScrollGlue(ControlHandle controlHndl, short partCode);
-void SetScrollBarValue(ControlHandle controlHndl, short *amount);
-void ScrollInsertPt(void);
+void ScrollbarAction(ControlHandle controlHndl, short *amount);
+void ScrollInsertPt(WindowPtr winPtr);
