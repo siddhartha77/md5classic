@@ -7,13 +7,31 @@
 /* Create the scroll bars. Note that the horizontal scroll bar is never enabled
    since the window word wraps. */
 void SetupScrollBars(WindowPtr winPtr) {
+    Rect            vScrollBoundsRect;
+    Rect            hScrollBoundsRect;
     DocumentPeek    docPtr;
     
+    SetRect(&vScrollBoundsRect,
+        winPtr->portRect.right - kScrollbarAdjust,
+        winPtr->portRect.top - 1,
+        winPtr->portRect.right + 1,
+        winPtr->portRect.bottom - (kScrollbarAdjust - 1)
+    );
+    
+    /* Since we aren't using the horizontal scrollbar,
+       set its top to just out of view. */
+    SetRect(&hScrollBoundsRect,
+        winPtr->portRect.left - 1,
+        winPtr->portRect.bottom + kScrollbarAdjust,
+        winPtr->portRect.right - (kScrollbarAdjust - 1),
+        winPtr->portRect.bottom + 1
+    );
+    
     docPtr = (DocumentPeek)winPtr;    
-    docPtr->vScrollHndl = NewControl(winPtr, NULL, "\p", true, 0, 0, 0, scrollBarProc, kVertical);
+    docPtr->vScrollHndl = NewControl(winPtr, &vScrollBoundsRect, "\p", true, 0, 0, 0, scrollBarProc, kVertical);
     
     /* This control is always hidden */
-    docPtr->hScrollHndl = NewControl(winPtr, NULL, "\p", false, 0, 0, 0, scrollBarProc, kHorizontal);
+    docPtr->hScrollHndl = NewControl(winPtr, &hScrollBoundsRect, "\p", false, 0, 0, 0, scrollBarProc, kHorizontal);
 }
 
 /* Calculate the new control maximum value and current value, whether it is the horizontal or
@@ -27,10 +45,13 @@ void AdjustHV(Boolean isVert, ControlHandle controlHndl, TEHandle teHndl, Boolea
 	short		oldValue, oldMax;
 	TEPtr		tePtr;
 	
+	if (!isVert) return;
+	
 	oldValue = GetControlValue(controlHndl);
 	oldMax = GetControlMaximum(controlHndl);
-	tePtr = *teHndl;							/* point to TERec for convenience */
-	if ( isVert ) {
+	tePtr = *teHndl;
+	
+	if (isVert) {
 		lines = tePtr->nLines;
 		
 		/* since nLines isn't right if the last character is a return, check for that case */
@@ -59,8 +80,9 @@ void AdjustHV(Boolean isVert, ControlHandle controlHndl, TEHandle teHndl, Boolea
 	SetControlValue(controlHndl, value);
 	
 	/* now redraw the control if it needs to be and can be */
-	if (canRedraw || (max != oldMax) || (value != oldValue))
-		ShowControl(controlHndl);
+	if (canRedraw || (max != oldMax) || (value != oldValue)) {
+	    ShowControl(controlHndl);
+	}
 }
 
 
@@ -108,12 +130,10 @@ void AdjustScrollBars(WindowPtr winPtr, Boolean needsResize) {
 	DocumentPeek docPtr;
 	
 	docPtr = (DocumentPeek)winPtr;
-	/* First, turn visibility of scrollbars off so we won't get unwanted redrawing */
-	(*docPtr->vScrollHndl)->contrlVis = kControlInvisible;
 	
-#ifdef H_SCROLLBARS
+	/* First, turn visibility of scrollbars off so we won't get unwanted redrawing */
+	(*docPtr->vScrollHndl)->contrlVis = kControlInvisible;	
     (*docPtr->hScrollHndl)->contrlVis = kControlInvisible;
-#endif
 	
 	/* move & size as needed */
 	if (needsResize) {							

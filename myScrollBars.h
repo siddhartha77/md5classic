@@ -2,13 +2,19 @@
 #include <ToolUtils.h>
 
 enum {
-    kScrollBarHeight = 15,
-    kScrollBarWidth = 15
+    /* kScrollbarAdjust and kScrollbarWidth are used in calculating
+       values for control positioning and sizing. */
+    kScrollbarWidth     = 16,
+    kScrollbarAdjust    = 15,
+    
+    /* kScrollTweek compensates for off-by-one requirements of the scrollbars
+       to have borders coincide with the growbox. */
+    kScrollTweek        = 2
 };
 
-enum {
+/*enum {
     kScrollBarBottomMargin = 10
-};
+};*/
 
 enum {
     scrollBarProc       = 16,

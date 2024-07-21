@@ -38,15 +38,6 @@ enum {
 	   is called. */
     kMinDocDim          = 64,
     
-    /* kScrollbarAdjust and kScrollbarWidth are used in calculating
-	   values for control positioning and sizing. */
-    kScrollbarWidth     = 16,
-    kScrollbarAdjust    = 15,
-    
-    /* kScrollTweek compensates for off-by-one requirements of the scrollbars
-       to have borders coincide with the growbox. */
-    kScrollTweek        = 2,
-    
     /* kControlInvisible is used to 'turn off' controls (i.e., cause the control not
 	   to be redrawn as a result of some Control Manager call such as SetCtlValue)
 	   by being put into the contrlVis field of the record. kControlVisible is used

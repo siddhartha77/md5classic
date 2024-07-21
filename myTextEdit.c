@@ -84,7 +84,7 @@ pascal Boolean ClickLoop() {
             ScrollbarAction(docPtr->vScrollHndl, &scrollAmount);
             destBottom = destRect->top + tePtr->nLines * lineHeight;
             
-            if (viewRect->bottom < destBottom + kScrollBarHeight) {            
+            if (viewRect->bottom < destBottom + kScrollbarAdjust) {            
                 /* Small delay so scrolling isn't so fast */
                 Delay(kClickLoopScrollDelay, NULL);
                 TEScroll(0, scrollAmount * tePtr->lineHeight, docPtr->teHndl);
@@ -134,8 +134,8 @@ void GetTERect(WindowPtr winPtr, Rect *teRect) {
 	InsetRect(teRect, kTextMargin, kTextMargin);
 	
 	/* and for the scrollbars */
-	teRect->bottom = teRect->bottom - kScrollBarHeight;
-	teRect->right = teRect->right - kScrollBarWidth;
+	teRect->bottom = teRect->bottom - kScrollbarAdjust;
+	teRect->right = teRect->right - kScrollbarAdjust;
 }
 
 /* Update the TERec's view rect so that it is the greatest multiple of
