@@ -44,8 +44,10 @@ void AdjustHV(Boolean isVert, ControlHandle controlHndl, TEHandle teHndl, Boolea
 	short		value, lines, max;
 	short		oldValue, oldMax;
 	TEPtr		tePtr;
-	
+
+#ifndef H_SCROLLBARS
 	if (!isVert) return;
+#endif
 	
 	oldValue = GetControlValue(controlHndl);
 	oldMax = GetControlMaximum(controlHndl);
