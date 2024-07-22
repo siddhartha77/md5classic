@@ -11,6 +11,7 @@
 #include <StandardFile.h>
 #include <Strings.h>
 #include <TextEdit.h>
+#include <ToolUtils.h>
 #include <Windows.h>
 
 enum {
@@ -32,8 +33,8 @@ Boolean DoSaveAs(void);
 void DoQuit(void);
 void RestartProc(void);
 WindowPtr SetupWindow(void);
-void ProcessFile(SFReply *replyPtr);
-void AutoSaveHash(ParmBlkPtr processedFileParamBlkPtr, unsigned char *md5HexResult);
+void ProcessFile(void *replyPtr, Boolean isHFSPlusReply);
+void AutoSaveHash(Str255 processedFileNamePStr, short vRefNum, StringPtr md5HexResultPStr);
 void PrintError(OSErr err);
 void SetupSaveParamBlock(ParmBlkPtr paramBlkPtr);
 OSErr PBSetTypeCreator(ParmBlkPtr paramBlkPtr, OSType fileType, OSType fileCreator);

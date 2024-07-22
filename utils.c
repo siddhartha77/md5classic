@@ -1,17 +1,5 @@
 #include "utils.h"
 
-/* Converts a PString to a CString. */
-void myPStrToCStr(StringPtr s) {
-    short i;
-    short len = s[0];
-    
-    for (i = 1 ; i <= len ; ++i) {
-        s[i - 1] = s[i];
-    }
-    
-    s[len] = '\0';
-}
-
 /* Copy a PString. */
 void myCopyPStr(const Str255 s,Str255 t) {
 	BlockMove((Ptr) s,(Ptr) t,s[0]+1);
@@ -105,4 +93,23 @@ void mySafeFilename(Str255 s) {
         
         s[s[0] - extensionRIndex] = 'É';
     }
+}
+
+void myLLNumToPStr(long long n,Str255 s,unsigned short minDigits) {
+	s[0] = myLLNumToDigits(n,&s[1],minDigits);
+}
+
+unsigned short myLLNumToDigits(long long n,StringPtr s,unsigned short minDigits) {
+register char	numStr[19];		//only 19 decimal digits are possible from 64 bits
+register short	start,i,j=0;
+
+	do
+	{
+		numStr[j++]='0'+(n%10);
+		n/=10;
+	} while (n>0);
+	start=(j<minDigits) ? (minDigits-j) : 0;
+	for (i=0;i<start;i++) s[i]='0';
+	for (i=start;j>0;i++) s[i]=numStr[--j];
+	return (i);
 }

@@ -1,15 +1,22 @@
-#define APP_NAME        "\pmd5classic"
+#define APP_NAME            "\pmd5classic"
 
-#define SAVE_PROMPT     "\pSave output as..."
-#define ORIG_SAVENAME   "\poutput.txt"
+#define SAVE_PROMPT         "\pSave output as..."
+#define ORIG_SAVENAME       "\poutput.txt"
 
-#define ERROR_INFO      "\pAn error occurred: "
+#define AUTOSAVE_EXTENSION  "\p.md5"
+#define AUTOSAVE_DELIMITER  "\p *"
 
-#define CALC_INFO       "\p..."
-#define CANCEL_INFO     "\pOperation canceled."
-#define TIME_2_INFO     "\p seconds ("
+#define ERROR_INFO          "\p  An error occurred: "
+
+#define CALC_INFO           "\p..."
+#define CANCEL_INFO         "\pOperation canceled."
+#define TIME_2_INFO         "\p seconds ("
 
 enum {
+    /* For autosave and save */
+    kSaveFileType       = 'TEXT',
+    kSaveFileCreator    = 'ttxt',
+
     /* Used in positioning dialogs. */
     kOpenTop            = 30,
     kOpenLeft           = 30,
@@ -59,3 +66,5 @@ typedef struct {
 	Rect            limitRect;
 	Boolean         unsavedData;
 } DocumentRecord, *DocumentPeek;
+
+extern Boolean gHasHFSPlusAPIs;

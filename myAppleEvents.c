@@ -34,15 +34,16 @@ OSErr GotRequiredParams (AppleEvent *theAppleEvent) {
 pascal OSErr HandleODOC(AppleEvent *appleEvent, AppleEvent *aeReply, long handlerRefcon) {
 #pragma unused (handlerRefcon)	
 #pragma unused (aeReply)
-	FSSpec		    myFSS;
-	SFReply         sfReply;
-	AEDescList	    docList;
-	Size		    actualSize;
-	AEKeyword	    keywd;
-	DescType	    typeCode;
-	OSErr		    err;
-	long		    index, itemsInList;
-	short           wdRefNum;
+	FSSpec		        myFSS;
+	SFReply             sfReply;
+	StandardFileReply   stdReply;
+	AEDescList	        docList;
+	Size		        actualSize;
+	AEKeyword	        keywd;
+	DescType	        typeCode;
+	OSErr		        err;
+	long		        index, itemsInList;
+	short               wdRefNum;
 
 	PrintError(err = AEGetParamDesc(appleEvent, keyDirectObject, typeAEList, &docList));
 	PrintError(err = GotRequiredParams(appleEvent));
@@ -56,12 +57,17 @@ pascal OSErr HandleODOC(AppleEvent *appleEvent, AppleEvent *aeReply, long handle
         
         if (err) return err;
         
-        /* SFReply.vRefNum is actually a working directory reference number, not a volume reference number */
-	    OpenWD(myFSS.vRefNum, myFSS.parID, NULL, &wdRefNum);
-	    sfReply.vRefNum = wdRefNum;
-	    sfReply.version = 0;
-	    BlockMove(myFSS.name, sfReply.fName, myFSS.name[0] + 1);
-	    ProcessFile(&sfReply);
+        if (gHasHFSPlusAPIs) {
+            stdReply.sfFile = myFSS;
+            ProcessFile(&stdReply, gHasHFSPlusAPIs);
+        } else {
+            /* SFReply.vRefNum is actually a working directory reference number, not a volume reference number */
+    	    OpenWD(myFSS.vRefNum, myFSS.parID, NULL, &wdRefNum);
+    	    sfReply.vRefNum = wdRefNum;
+    	    sfReply.version = 0;
+    	    BlockMove(myFSS.name, sfReply.fName, myFSS.name[0] + 1);
+    	    ProcessFile(&sfReply, gHasHFSPlusAPIs);
+    	}
 	}
 	
 	AEDisposeDesc(&docList);

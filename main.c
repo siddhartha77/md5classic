@@ -9,6 +9,8 @@
 #include "utils.h"
 #include "md5.h"
 
+Boolean gHasHFSPlusAPIs = false;
+
 /* Initialize the Toolbox */
 void InitToolbox() {
     MaxApplZone();
@@ -26,23 +28,32 @@ void InitToolbox() {
 
 /* Call the open file dialog and process the file if the user selects one. */
 void DoOpen() {
-    SFReply         reply;
-    Point           where;
-    TEHandle        teHndl;
-    WindowPtr       winPtr;
+    SFReply             sfReply;
+    StandardFileReply   stdReply;
+    Point               where;
+    TEHandle            teHndl;
+    WindowPtr           winPtr;
     
     winPtr = FrontWindow();
     teHndl = ((DocumentPeek)winPtr)->teHndl;
-    SetPt(&where, kOpenLeft, kOpenTop);    
-    SFGetFile(where, NULL, NULL, -1, NULL, NULL, &reply);
     
-    /* Set the cursor to the end of the text */
-    TESetSelect((*teHndl)->teLength, (*teHndl)->teLength, teHndl);
+    if (gHasHFSPlusAPIs) {
+        StandardGetFile(NULL, -1, NULL, &stdReply);
         
-    if (reply.good) {
-        ProcessFile(&reply);
+        if (stdReply.sfGood) {
+            ProcessFile(&stdReply, gHasHFSPlusAPIs);
+        } else {
+            /* User cancelled. */
+        }
     } else {
-        /* User cancelled. */
+        SetPt(&where, kOpenLeft, kOpenTop);    
+        SFGetFile(where, NULL, NULL, -1, NULL, NULL, &sfReply);
+        
+        if (sfReply.good) {
+            ProcessFile(&sfReply, gHasHFSPlusAPIs);
+        } else {
+            /* User cancelled. */
+        }
     }
 }
 
@@ -76,7 +87,7 @@ Boolean DoSaveAs() {
         err = PBWrite(&paramBlk, false);
         HUnlock((*teHndl)->hText);
         err = PBClose(&paramBlk, false);        
-        err = PBSetTypeCreator(&paramBlk, 'TEXT', 'ttxt');
+        err = PBSetTypeCreator(&paramBlk, kSaveFileType, kSaveFileCreator);
         
         PrintError(err);
         
@@ -161,26 +172,38 @@ WindowPtr SetupWindow() {
     return winPtr;
 }
 
-/* Process a file and print the results. */
-void ProcessFile(SFReply *replyPtr) {
-    ParamBlockRec   paramBlk;
-    Str63           processingPStr = CALC_INFO;
-    Str32           md5HexResultPStr = CANCEL_INFO;
-    Str32           secondsPStr = TIME_2_INFO;
-    Str32           bytesPerSecondPStr;
-    Str15           fileSizePStr;
-    Str15           timerPStr;
-    CursHandle      watchCurs;
-    TEHandle        teHndl;
-    WindowPtr       winPtr;
-    OSErr           err;
-    unsigned long   startTime;
-    unsigned long   endTime;
-    unsigned long   diffTime;
-    long            logEOF;
-    long            bytesPerSecond;
-    short           result;
-    unsigned char   md5Result[MD5_DIGEST_SIZE];
+/* Process a file and print the results.
+   Use a void * to the reply because it can either be a SFReply or,
+   on HFS+ systems, a StandardFileReply. On HFS+ systems we use
+   PBOpenForkSync and a special MD5 call to handle API calls
+   to functions that support >2GB file sizes. */
+void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
+    ParamBlockRec       paramBlk;
+    FSRef               fsRef;
+    FSForkIOParam       fsForkIOParam;
+    HFSUniStr255        dataForkName;
+    signed long long    forkSize;
+    Str255              filenamePStr;
+    Str63               processingPStr = CALC_INFO;
+    Str32               md5HexResultPStr = CANCEL_INFO;
+    Str32               secondsPStr = TIME_2_INFO;
+    Str32               bytesPerSecondPStr;
+    Str32               fileSizePStr;
+    Str15               timerPStr;
+    CursHandle          watchCurs;
+    TEHandle            teHndl;
+    WindowPtr           winPtr;
+    SFReply             *sfReplyPtr;
+    StandardFileReply   *stdReplyPtr;
+    OSErr               err;
+    unsigned long       startTime;
+    unsigned long       endTime;
+    unsigned long       diffTime;
+    long                logEOF;
+    long long           bytesPerSecond;
+    short               vRefNum;
+    short               result;
+    unsigned char       md5Result[MD5_DIGEST_SIZE];
     
     winPtr = FrontWindow();
     teHndl = ((DocumentPeek)winPtr)->teHndl;
@@ -188,18 +211,46 @@ void ProcessFile(SFReply *replyPtr) {
     /* Set the cursor to the end of the text */
     TESetSelect((*teHndl)->teLength, (*teHndl)->teLength, teHndl);
     
-    paramBlk.ioParam.ioCompletion = NULL;
-    paramBlk.ioParam.ioNamePtr = replyPtr->fName;
-    paramBlk.ioParam.ioVRefNum = replyPtr->vRefNum;
-    paramBlk.ioParam.ioVersNum = replyPtr->version;
-    paramBlk.ioParam.ioPermssn = fsRdPerm;
-    paramBlk.ioParam.ioMisc = NULL;
+    if (isHFSPlusReply) {
+        stdReplyPtr = (StandardFileReply *)replyPtr;
+        FSpMakeFSRef(&stdReplyPtr->sfFile, &fsRef);
+        FSGetDataForkName(&dataForkName);
+        
+        fsForkIOParam.ref = &fsRef;
+        fsForkIOParam.forkNameLength = dataForkName.length;
+        fsForkIOParam.forkName = dataForkName.unicode;
+        fsForkIOParam.permissions = fsRdPerm;
+        
+        err = PBOpenForkSync(&fsForkIOParam);        
+        
+        myCopyPStr(stdReplyPtr->sfFile.name, filenamePStr);
+        FSGetForkSize(fsForkIOParam.forkRefNum, &forkSize);
+        myLLNumToPStr(forkSize, fileSizePStr, 0);
+        
+        /* We use a working directory here for autosaving. SFReply is a working directory,
+           not exactly a volume reference number, so we don't do it on non-HFS+ systems */
+        OpenWD(stdReplyPtr->sfFile.vRefNum, stdReplyPtr->sfFile.parID, NULL, &vRefNum);
+    } else {
+        sfReplyPtr = (SFReply *)replyPtr;
+        
+        paramBlk.ioParam.ioCompletion = NULL;
+        paramBlk.ioParam.ioNamePtr = sfReplyPtr->fName;
+        paramBlk.ioParam.ioVRefNum = sfReplyPtr->vRefNum;
+        paramBlk.ioParam.ioVersNum = sfReplyPtr->version;
+        paramBlk.ioParam.ioPermssn = fsRdPerm;
+        paramBlk.ioParam.ioMisc = NULL;
+
+        err = PBOpen(&paramBlk, false);
+        
+        myCopyPStr(sfReplyPtr->fName, filenamePStr);
+        GetEOF(paramBlk.ioParam.ioRefNum, &logEOF);
+        NumToString(logEOF, fileSizePStr);
+        forkSize = logEOF;
+        vRefNum = sfReplyPtr->vRefNum;
+    }
     
-    err = PBOpen(&paramBlk, false);    
-    TEUpdate(&(*teHndl)->viewRect, teHndl);     
-    GetEOF(paramBlk.ioParam.ioRefNum, &logEOF);
-    NumToString(logEOF, fileSizePStr);
-    TEInsert(replyPtr->fName + 1, replyPtr->fName[0], teHndl);
+    TEUpdate(&(*teHndl)->viewRect, teHndl);
+    TEInsert(filenamePStr + 1, filenamePStr[0], teHndl);
     TEInsert(" (", 2, teHndl);
     TEInsert(fileSizePStr + 1, fileSizePStr[0], teHndl);
     TEInsert(" bytes)", 8, teHndl);
@@ -215,7 +266,13 @@ void ProcessFile(SFReply *replyPtr) {
         GetDateTime(&startTime);
 
         /* Do the MD5 calculation */
-        result = MD5MacFile(&paramBlk, md5Result);
+        if (isHFSPlusReply) {
+            result = MD5MacFileFork((FSForkIOParamPtr)&fsForkIOParam, md5Result);
+            PBCloseForkSync(&fsForkIOParam);
+        } else {
+            result = MD5MacFile((ParmBlkPtr)&paramBlk, md5Result);
+            PBClose(&paramBlk, false);
+        }
         
         if (result) {
             myMD5ValsToHexChars(md5Result, md5HexResultPStr, gPrefs.uppercaseHash);
@@ -225,11 +282,11 @@ void ProcessFile(SFReply *replyPtr) {
         NumToString(endTime - startTime, timerPStr);
 
         /* Clear the line. The magic 10 here as for "( bytes). */
-        TESetSelect((*teHndl)->selStart - processingPStr[0] - fileSizePStr[0] - replyPtr->fName[0] - 10, (*teHndl)->selEnd, teHndl);
+        TESetSelect((*teHndl)->selStart - processingPStr[0] - fileSizePStr[0] - filenamePStr[0] - 10, (*teHndl)->selEnd, teHndl);
         TEDelete(teHndl);
         TEInsert(md5HexResultPStr + 1, md5HexResultPStr[0], teHndl);
         TEInsert("  ", 2, teHndl);
-        TEInsert(replyPtr->fName + 1, replyPtr->fName[0], teHndl);
+        TEInsert(filenamePStr + 1, filenamePStr[0], teHndl);
         TEInsert("  ", 2, teHndl);
         TEInsert(fileSizePStr + 1, fileSizePStr[0], teHndl);
         TEInsert(" bytes", 7, teHndl);
@@ -242,12 +299,12 @@ void ProcessFile(SFReply *replyPtr) {
             diffTime = endTime - startTime;
             
             if (diffTime > 0) {
-                bytesPerSecond = logEOF / diffTime;
+                bytesPerSecond = forkSize / diffTime;
             } else {
-                bytesPerSecond = logEOF;
+                bytesPerSecond = forkSize;
             }
                 
-            NumToString(bytesPerSecond, bytesPerSecondPStr);
+            myLLNumToPStr(bytesPerSecond, bytesPerSecondPStr, 0);
             TEInsert(bytesPerSecondPStr + 1, bytesPerSecondPStr[0], teHndl);
             TEInsert(" bytes/sec)\r", 13, teHndl);            
         } else {
@@ -257,7 +314,7 @@ void ProcessFile(SFReply *replyPtr) {
         ScrollInsertPt(winPtr);
         
         if (gPrefs.autosaveHash) {
-            AutoSaveHash(&paramBlk, md5HexResultPStr);
+            AutoSaveHash(filenamePStr, vRefNum, md5HexResultPStr);
         }
         
         SetCursor(&qd.arrow);
@@ -266,24 +323,24 @@ void ProcessFile(SFReply *replyPtr) {
 }
 
 /* Save the file hash to a .md5 text file. */
-void AutoSaveHash(ParmBlkPtr processedFileParamBlkPtr, StringPtr md5HexResultPStr) {
+void AutoSaveHash(Str255 processedFileNamePStr, short vRefNum, StringPtr md5HexResultPStr) {
     Str255          buffer;
     Str63           filename;
     ParamBlockRec   paramBlk;
     OSErr           err;
     
-    myCopyPStr(processedFileParamBlkPtr->ioParam.ioNamePtr, filename);
-    myAppendPStr(filename, "\p.md5");
+    myCopyPStr(processedFileNamePStr, filename);
+    myAppendPStr(filename, AUTOSAVE_EXTENSION);
     mySafeFilename(filename);
     myCopyPStr(md5HexResultPStr, buffer);
-    myAppendPStr(buffer, "\p *");
-    myAppendPStr(buffer, processedFileParamBlkPtr->ioParam.ioNamePtr);
+    myAppendPStr(buffer, AUTOSAVE_DELIMITER);
+    myAppendPStr(buffer, processedFileNamePStr);
     
     SetupSaveParamBlock(&paramBlk);
         
     paramBlk.ioParam.ioNamePtr = filename;
-    paramBlk.ioParam.ioVRefNum = processedFileParamBlkPtr->ioParam.ioVRefNum;
-    paramBlk.ioParam.ioVersNum = processedFileParamBlkPtr->ioParam.ioVersNum;
+    paramBlk.ioParam.ioVRefNum = vRefNum;
+    paramBlk.ioParam.ioVersNum = 0;
     paramBlk.ioParam.ioBuffer = (char *)&buffer[1];
     paramBlk.ioParam.ioReqCount = buffer[0];
     
@@ -292,7 +349,7 @@ void AutoSaveHash(ParmBlkPtr processedFileParamBlkPtr, StringPtr md5HexResultPSt
     err = PBOpen(&paramBlk, false);
     err = PBWrite(&paramBlk, false);
     err = PBClose(&paramBlk, false);        
-    err = PBSetTypeCreator(&paramBlk, 'TEXT', 'ttxt');
+    err = PBSetTypeCreator(&paramBlk, kSaveFileType, kSaveFileCreator);
         
     PrintError(err);
 }
@@ -314,7 +371,6 @@ void PrintError(OSErr err) {
         TEInsert(errorPStr + 1, errorPStr[0], teHndl);
         NumToString(err, errorNumPStr);
         TEInsert(errorNumPStr + 1, errorNumPStr[0], teHndl);
-        TEInsert(newLinePStr + 1, newLinePStr[0], teHndl);
         TEInsert(newLinePStr + 1, newLinePStr[0], teHndl);
         ScrollInsertPt(winPtr);
     }
@@ -674,7 +730,7 @@ void ExitApplication() {
 /* It's the main function. */
 int main() {
     WindowPtr   winPtr;
-    long        aLong;
+    long        response;
     
     MaxApplZone();
     MoreMasters();
@@ -688,9 +744,19 @@ int main() {
     SetupTE(winPtr);
     AdjustScrollBars(winPtr, true);
     
-    /* If we support Drag and Drog, then initialize it. */
-    if (IsTrapImplemented(_Gestalt) && Gestalt(gestaltAppleEventsAttr, &aLong) == noErr) {
-        InitAppleEvents();
+    /* Check for Gestalt */
+    if (IsTrapImplemented(_Gestalt)) {
+        /* If we support Drag and Drop, then initialize it. */
+        if (Gestalt(gestaltAppleEventsAttr, &response) == noErr) {
+            if (response & (1 << gestaltAppleEventsPresent)) {
+                InitAppleEvents();
+            }
+        }
+        
+        /* Check for HFS+ support */
+        if (Gestalt(gestaltFSAttr, &response) == noErr) {
+            gHasHFSPlusAPIs = (response & (1 << gestaltHasHFSPlusAPIs)) != 0;
+        }
     } else {
         /* Open File Dialog */
         DoOpen();

@@ -475,8 +475,90 @@ static void MD5Final(unsigned char digest[16], MD5Context *ctx) {
     //memset(ctx, 0, sizeof(MD5Context));        /* In case it's sensitive */
 }
 
+/* This is a different version of the MD5MacFile function that adds the API
+   calls to support >2GB file sizes */
+short MD5MacFileFork(FSForkIOParamPtr openFSForkPtr, unsigned char *result) {
+    FSForkIOParamPtr  currFSForkPtr;
+    FSForkIOParamPtr  fsForkPtr[2];
+	MD5Context  ctx;
+    long        count = 0xffff;
+    char        currFSForkIndex = 0;
+	
+	MD5Init(&ctx);
+		
+	fsForkPtr[0] = (FSForkIOParamPtr)NewPtrClear(sizeof(FSForkIOParam));
+	fsForkPtr[1] = (FSForkIOParamPtr)NewPtrClear(sizeof(FSForkIOParam));
+	SetupFSForkIOParam(fsForkPtr[0], openFSForkPtr, count);
+	SetupFSForkIOParam(fsForkPtr[1], openFSForkPtr, count);
+	
+	PBReadForkAsync(fsForkPtr[0]);
+	PBReadForkAsync(fsForkPtr[1]);
+	currFSForkPtr = fsForkPtr[0];
+	
+	while (true) {
+	    /* Wait for the I/O operation to complete */
+	    while (currFSForkPtr->ioResult == ioInProgress) {};
+	    
+	    /* Data ready */
+	    
+	    /* Stop reading if no more data */
+	    if (currFSForkPtr->actualCount == 0) {
+	        break;
+	    }
+	    
+	    /* Checksum the data */   
+        MD5Update(&ctx, (unsigned char *)currFSForkPtr->buffer, currFSForkPtr->actualCount);
+        
+#ifdef ALLOW_CANCEL
+        if (GetNextEvent(keyDownMask, &event)) {
+            switch (event.what) {
+                case keyDown:
+                    if ((event.message & charCodeMask) == kEscapeCharCode) {
+                      	DestroyFSForkIOParam(fsForkPtr[0]);
+                      	DestroyFSForkIOParam(fsForkPtr[1]);
+                          
+                        return 0;
+                    }
+                    
+                    break;
+                default:
+                    break;
+            }
+        }
+#endif
+    	
+    	/* Put the buffer back into the queue */
+    	PBReadForkAsync(currFSForkPtr);
+    	
+    	/* Switch to the other buffer */
+    	currFSForkIndex = 1 - currFSForkIndex;
+    	currFSForkPtr = fsForkPtr[currFSForkIndex];
+    	currFSForkPtr->positionMode = fsAtMark;
+	}
+	
+    DestroyFSForkIOParam(fsForkPtr[0]);
+    DestroyFSForkIOParam(fsForkPtr[1]);
+    MD5Final(result, &ctx);
+	
+	return 1;
+}
+
+static void SetupFSForkIOParam(FSForkIOParamPtr readFSForkPtr, FSForkIOParamPtr openFSForkPtr, long bufferSize) {
+    readFSForkPtr->ioCompletion = NULL;
+    readFSForkPtr->ioResult = ioInProgress;
+    readFSForkPtr->forkRefNum = openFSForkPtr->forkRefNum;
+    readFSForkPtr->positionMode = fsAtMark;
+    readFSForkPtr->positionOffset = 0;
+    readFSForkPtr->requestCount = bufferSize;
+    readFSForkPtr->buffer = NewPtr(bufferSize);
+}
+
+static void DestroyFSForkIOParam(FSForkIOParamPtr fsForkPtr) {
+    DisposePtr(fsForkPtr->buffer);
+    DisposePtr((Ptr)fsForkPtr);
+}
+
 short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result) {
-	/* EventRecord event; */
     ParmBlkPtr  currPBPtr;
     ParmBlkPtr  pbPtr[2];
 	MD5Context  ctx;
@@ -508,14 +590,13 @@ short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result) {
 	    /* Checksum the data */   
         MD5Update(&ctx, (unsigned char *)currPBPtr->ioParam.ioBuffer, currPBPtr->ioParam.ioActCount);
         
-        /* Uncomment to allow cancelling */
-        /*if (GetNextEvent(keyDownMask, &event)) {
+#ifdef ALLOW_CANCEL
+        if (GetNextEvent(keyDownMask, &event)) {
             switch (event.what) {
                 case keyDown:
                     if ((event.message & charCodeMask) == kEscapeCharCode) {
                       	DestroyParamBlk(pbPtr[0]);
                       	DestroyParamBlk(pbPtr[1]);
-                        PBClose(pbOpenBlkPtr, false);
                           
                         return 0;
                     }
@@ -524,7 +605,8 @@ short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result) {
                 default:
                     break;
             }
-        }*/
+        }
+#endif
     	
     	/* Put the buffer back into the queue */
     	PBRead(currPBPtr, true);
@@ -537,7 +619,6 @@ short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result) {
 	
     DestroyParamBlk(pbPtr[0]);
     DestroyParamBlk(pbPtr[1]);
-    PBClose(pbOpenBlkPtr, false);
     MD5Final(result, &ctx);
 	
 	return 1;
