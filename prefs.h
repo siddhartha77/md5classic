@@ -14,10 +14,11 @@ typedef short PrefsBitField;
 typedef PrefsBitField * PrefsBitFieldPtr;
 
 typedef struct {
-    unsigned short     askToSave : 1;
-    unsigned short     autosaveHash : 1;
-    unsigned short     uppercaseHash : 1;
-    unsigned short     verbose : 1;
+    unsigned short      askToSave : 1;
+    unsigned short      autosaveHash : 1;
+    unsigned short      uppercaseHash : 1;
+    unsigned short      digitGrouping : 1;
+    unsigned short      verbose : 1;
 } Prefs;
 
 extern Prefs    gPrefs;

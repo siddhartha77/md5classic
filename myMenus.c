@@ -28,6 +28,7 @@ void SetupMenus(void) {
     CheckItem(prefsMenuHndl, kPrefsMenuAskToSave, gPrefs.askToSave);
     CheckItem(prefsMenuHndl, kPrefsMenuAutosaveHash, gPrefs.autosaveHash);
     CheckItem(prefsMenuHndl, kPrefsMenuUppercaseHash, gPrefs.uppercaseHash);
+    CheckItem(prefsMenuHndl, kPrefsMenuDigitGrouping, gPrefs.digitGrouping);
     CheckItem(prefsMenuHndl, kPrefsMenuVerbose, gPrefs.verbose);
     
     DrawMenuBar();
@@ -117,6 +118,10 @@ void DoMenu(long menuResult) {
                     break;
                 case kPrefsMenuUppercaseHash:
                     gPrefs.uppercaseHash = (menuItemMark == noMark);
+                
+                    break;
+                case kPrefsMenuDigitGrouping:
+                    gPrefs.digitGrouping = (menuItemMark == noMark);
                 
                     break;
                 case kPrefsMenuVerbose:

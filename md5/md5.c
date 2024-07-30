@@ -3,6 +3,8 @@
 #define memcpy(d, s, l) BlockMove(s, d, l)
 #define memset(p, a, l) {unsigned long i; for (i = 0 ; i < (l) ; ++i) ((Ptr)(p))[i] = (a);}
 
+volatile Boolean gIOComplete = false;
+
 #ifdef __MC68K__
 static void byteReverse(register unsigned char *buf, register unsigned longs) {
     asm {                                   // Timings
@@ -475,16 +477,23 @@ static void MD5Final(unsigned char digest[16], MD5Context *ctx) {
     //memset(ctx, 0, sizeof(MD5Context));        /* In case it's sensitive */
 }
 
+pascal void IOComplete(FSForkIOParamPtr fsForkIOParamPtr) {
+#pragma unused (fsForkIOParamPtr)
+    gIOComplete = true;
+}
+
 /* This is a different version of the MD5MacFile function that adds the API
    calls to support >2GB file sizes */
 short MD5MacFileFork(FSForkIOParamPtr openFSForkPtr, unsigned char *result) {
-    FSForkIOParamPtr  currFSForkPtr;
-    FSForkIOParamPtr  fsForkPtr[2];
-	MD5Context  ctx;
-    long        count = 0xffff;
-    char        currFSForkIndex = 0;
+    FSForkIOParamPtr    currFSForkPtr;
+    FSForkIOParamPtr    fsForkPtr[2];
+	MD5Context          ctx;
+    long                count = 0xffff;
+    char                currFSForkIndex = 0;
 	
 	MD5Init(&ctx);
+	
+	gIOComplete = false;
 		
 	fsForkPtr[0] = (FSForkIOParamPtr)NewPtrClear(sizeof(FSForkIOParam));
 	fsForkPtr[1] = (FSForkIOParamPtr)NewPtrClear(sizeof(FSForkIOParam));
@@ -492,17 +501,22 @@ short MD5MacFileFork(FSForkIOParamPtr openFSForkPtr, unsigned char *result) {
 	SetupFSForkIOParam(fsForkPtr[1], openFSForkPtr, count);
 	
 	PBReadForkAsync(fsForkPtr[0]);
-	PBReadForkAsync(fsForkPtr[1]);
+	while (!gIOComplete && fsForkPtr[0]->ioResult > 0) {
+        Delay(1, NULL);
+    };
+	PBReadForkAsync(fsForkPtr[1]);    	
 	currFSForkPtr = fsForkPtr[0];
 	
-	while (true) {
+    while (true) {
 	    /* Wait for the I/O operation to complete */
-	    while (currFSForkPtr->ioResult == ioInProgress) {};
+	    while (!gIOComplete && currFSForkPtr->ioResult > 0) {
+	        Delay(1, NULL);
+	    };
 	    
 	    /* Data ready */
 	    
 	    /* Stop reading if no more data */
-	    if (currFSForkPtr->actualCount == 0) {
+	    if (currFSForkPtr->actualCount <= 0) {
 	        break;
 	    }
 	    
@@ -526,14 +540,21 @@ short MD5MacFileFork(FSForkIOParamPtr openFSForkPtr, unsigned char *result) {
             }
         }
 #endif
-    	
+	    
+	    /* Usually an eofErr (-43) will trigger this break */
+        if (currFSForkPtr->ioResult < 0) {
+            break;
+        }
+	    
+	    /* Reset flag */
+	    gIOComplete = false;
+
     	/* Put the buffer back into the queue */
     	PBReadForkAsync(currFSForkPtr);
     	
     	/* Switch to the other buffer */
     	currFSForkIndex = 1 - currFSForkIndex;
     	currFSForkPtr = fsForkPtr[currFSForkIndex];
-    	currFSForkPtr->positionMode = fsAtMark;
 	}
 	
     DestroyFSForkIOParam(fsForkPtr[0]);
@@ -543,12 +564,15 @@ short MD5MacFileFork(FSForkIOParamPtr openFSForkPtr, unsigned char *result) {
 	return 1;
 }
 
-static void SetupFSForkIOParam(FSForkIOParamPtr readFSForkPtr, FSForkIOParamPtr openFSForkPtr, long bufferSize) {
+static void SetupFSForkIOParam(FSForkIOParamPtr readFSForkPtr, FSForkIOParamPtr openFSForkPtr, unsigned long bufferSize) {
     readFSForkPtr->ioCompletion = NULL;
+    
+    /* Any positive integer here will do */
     readFSForkPtr->ioResult = ioInProgress;
+    readFSForkPtr->ioCompletion = NewIOCompletionUPP(IOComplete);
     readFSForkPtr->forkRefNum = openFSForkPtr->forkRefNum;
     readFSForkPtr->positionMode = fsAtMark;
-    readFSForkPtr->positionOffset = 0;
+    readFSForkPtr->positionOffset = 0LL;
     readFSForkPtr->requestCount = bufferSize;
     readFSForkPtr->buffer = NewPtr(bufferSize);
 }
@@ -578,7 +602,7 @@ short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result) {
 	
 	while (true) {
 	    /* Wait for the I/O operation to complete */
-	    while (currPBPtr->ioParam.ioResult == ioInProgress) {};
+	    while (currPBPtr->ioParam.ioResult > 0) {};
 	    
 	    /* Data ready */
 	    
@@ -614,7 +638,6 @@ short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result) {
     	/* Switch to the other buffer */
     	currPBIndex = 1 - currPBIndex;
     	currPBPtr = pbPtr[currPBIndex];
-    	currPBPtr->ioParam.ioPosMode = fsAtMark;
 	}
 	
     DestroyParamBlk(pbPtr[0]);
@@ -632,7 +655,7 @@ static void SetupParamBlk(ParmBlkPtr pbReadBlkPtr, ParmBlkPtr pbOpenBlkPtr, long
     pbReadBlkPtr->ioParam.ioReqCount = bufferSize;
     pbReadBlkPtr->ioParam.ioBuffer = NewPtr(bufferSize);
     pbReadBlkPtr->ioParam.ioPosMode = fsAtMark;
-    pbReadBlkPtr->ioParam.ioPosOffset = 0;
+    pbReadBlkPtr->ioParam.ioPosOffset = 0L;
 }
 
 static void DestroyParamBlk(ParmBlkPtr pbPtr) {

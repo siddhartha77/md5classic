@@ -43,6 +43,7 @@ enum {
     kPrefsMenuAskToSave     = 1,
     kPrefsMenuAutosaveHash,
     kPrefsMenuUppercaseHash,
+    kPrefsMenuDigitGrouping,
     kPrefsMenuVerbose
 };
 

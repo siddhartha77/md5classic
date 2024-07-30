@@ -3,6 +3,7 @@
 #include "prefs.h"
 #include "checkTrap.h"
 #include "myAppleEvents.h"
+#include "myDrag.h"
 #include "myMenus.h"
 #include "myScrollBars.h"
 #include "myTextEdit.h"
@@ -189,7 +190,7 @@ void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
     Str32               secondsPStr = TIME_2_INFO;
     Str32               bytesPerSecondPStr;
     Str32               fileSizePStr;
-    Str15               timerPStr;
+    Str32               timerPStr;
     CursHandle          watchCurs;
     TEHandle            teHndl;
     WindowPtr           winPtr;
@@ -252,8 +253,13 @@ void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
     TEUpdate(&(*teHndl)->viewRect, teHndl);
     TEInsert(filenamePStr + 1, filenamePStr[0], teHndl);
     TEInsert(" (", 2, teHndl);
+    
+    if (gPrefs.digitGrouping) {
+       myDigitGroupPStr(fileSizePStr, "\p,");
+   }
+        
     TEInsert(fileSizePStr + 1, fileSizePStr[0], teHndl);
-    TEInsert(" bytes)", 8, teHndl);
+    TEInsert(" bytes)", 7, teHndl);
     
     /* Print the error here so we can see the filename */
     PrintError(err);
@@ -281,15 +287,15 @@ void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
         GetDateTime(&endTime);        
         NumToString(endTime - startTime, timerPStr);
 
-        /* Clear the line. The magic 10 here as for "( bytes). */
-        TESetSelect((*teHndl)->selStart - processingPStr[0] - fileSizePStr[0] - filenamePStr[0] - 10, (*teHndl)->selEnd, teHndl);
+        /* Clear the line. The magic 10 here as for "  ( bytes)". */
+        TESetSelect((*teHndl)->selStart - processingPStr[0] - fileSizePStr[0] - filenamePStr[0] - 9, (*teHndl)->selEnd, teHndl);
         TEDelete(teHndl);
         TEInsert(md5HexResultPStr + 1, md5HexResultPStr[0], teHndl);
         TEInsert("  ", 2, teHndl);
         TEInsert(filenamePStr + 1, filenamePStr[0], teHndl);
         TEInsert("  ", 2, teHndl);
         TEInsert(fileSizePStr + 1, fileSizePStr[0], teHndl);
-        TEInsert(" bytes", 7, teHndl);
+        TEInsert(" bytes", 6, teHndl);
         
         if (gPrefs.verbose && result) {
             TEInsert("  ", 2, teHndl);
@@ -298,6 +304,7 @@ void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
             
             diffTime = endTime - startTime;
             
+            /* Make sure we don't divide by zero */
             if (diffTime > 0) {
                 bytesPerSecond = forkSize / diffTime;
             } else {
@@ -305,6 +312,11 @@ void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
             }
                 
             myLLNumToPStr(bytesPerSecond, bytesPerSecondPStr, 0);
+            
+            if (gPrefs.digitGrouping) {
+                myDigitGroupPStr(bytesPerSecondPStr, "\p,");
+            }
+        
             TEInsert(bytesPerSecondPStr + 1, bytesPerSecondPStr[0], teHndl);
             TEInsert(" bytes/sec)\r", 13, teHndl);            
         } else {
@@ -359,8 +371,8 @@ void PrintError(OSErr err) {
     Str255      errorPStr = ERROR_INFO;
     Str255      newLinePStr = "\p\r";
     Str255      errorNumPStr;
-    TEHandle        teHndl;
-    WindowPtr       winPtr;
+    TEHandle    teHndl;
+    WindowPtr   winPtr;
     
     if (err != noErr) {
         winPtr = FrontWindow();
@@ -756,6 +768,13 @@ int main() {
         /* Check for HFS+ support */
         if (Gestalt(gestaltFSAttr, &response) == noErr) {
             gHasHFSPlusAPIs = (response & (1 << gestaltHasHFSPlusAPIs)) != 0;
+        }
+        
+        /* Check for Drag Manager */
+        if (Gestalt(gestaltDragMgrAttr, &response) == noErr) {
+            if (response & (1 << gestaltDragMgrPresent) != 0) {
+                InitDragManager();
+            }
         }
     } else {
         /* Open File Dialog */

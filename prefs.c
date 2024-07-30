@@ -1,4 +1,5 @@
 #include "prefs.h"
+#include "myMenus.h"
 
 Prefs   gPrefs;
 
@@ -21,10 +22,11 @@ void InitPreferences() {
     
     prefs = *((PrefsBitFieldPtr)(*prefsHndl));
     
-    gPrefs.askToSave = (prefs & 0x0001) > 0;
-    gPrefs.autosaveHash = (prefs & 0x0002) > 0;
-    gPrefs.uppercaseHash = (prefs & 0x0004) > 0;
-    gPrefs.verbose = (prefs & 0x0008) > 0;
+    gPrefs.askToSave        = (prefs & (1 << kPrefsMenuAskToSave - 1)) > 0;
+    gPrefs.autosaveHash     = (prefs & (1 << kPrefsMenuAutosaveHash - 1)) > 0;
+    gPrefs.uppercaseHash    = (prefs & (1 << kPrefsMenuUppercaseHash - 1)) > 0;
+    gPrefs.digitGrouping    = (prefs & (1 << kPrefsMenuDigitGrouping - 1)) > 0;
+    gPrefs.verbose          = (prefs & (1 << kPrefsMenuVerbose - 1)) > 0;
     
 
     DisposeHandle(prefsHndl);
@@ -35,10 +37,11 @@ void SavePreferences() {
     Handle  prefsHndl;
     short   prefs = 0;
     
-    prefs = gPrefs.askToSave;
-    prefs |= gPrefs.autosaveHash << 1;
-    prefs |= gPrefs.uppercaseHash << 2;
-    prefs |= gPrefs.verbose << 3;
+    prefs = gPrefs.askToSave        << (kPrefsMenuAskToSave - 1);
+    prefs |= gPrefs.autosaveHash    << (kPrefsMenuAutosaveHash - 1);
+    prefs |= gPrefs.uppercaseHash   << (kPrefsMenuUppercaseHash - 1);
+    prefs |= gPrefs.digitGrouping   << (kPrefsMenuDigitGrouping - 1);
+    prefs |= gPrefs.verbose         << (kPrefsMenuVerbose - 1);
     
     prefsHndl = GetResource(PREFS_RES_TYPE, kPrefsResID);
     

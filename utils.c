@@ -99,6 +99,39 @@ void myLLNumToPStr(long long n,Str255 s,unsigned short minDigits) {
 	s[0] = myLLNumToDigits(n,&s[1],minDigits);
 }
 
+void myInsertInPStr(Str255 s,const Str255 insertStr,short offset) {
+    register short	start,insertLen=insertStr[0];
+    register short	len=s[0];
+
+	if (insertLen > 0)
+	{
+		if (offset <= 0)						//insert at 'offset' chars from end of s
+		{
+			start = len + offset + 1;
+			if (start < 1) start = 1;			//underflow - prefix		
+		}	
+		else									//insert at 'offset' chars from start of s
+		{
+			if (offset > len) offset = len + 1;	//overflow - suffix
+			start = offset;				
+		}
+		if (start <= len) BlockMove((Ptr) &s[start],(Ptr) &s[start+insertLen],len-start+1);	//make room for insertStr
+		BlockMove((Ptr) &insertStr[1],(Ptr) &s[start],insertLen); 							//copy inserStr into s
+		s[0]+=insertLen;
+	}
+}
+
+void myDigitGroupPStr(Str255 s, Str255 delimiter) {
+    int i, j;
+    
+    j = 0;
+    
+    for (i = s[0] - 2 ; i > 1 ; i -= 2) {
+        myInsertInPStr(s, delimiter, i);
+        --i;
+    }
+}
+
 unsigned short myLLNumToDigits(long long n,StringPtr s,unsigned short minDigits) {
 register char	numStr[19];		//only 19 decimal digits are possible from 64 bits
 register short	start,i,j=0;
