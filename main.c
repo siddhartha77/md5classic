@@ -22,7 +22,7 @@ void InitToolbox() {
     InitDialogs(RestartProc);
     InitMenus();
     InitCursor();
-    TEInit();    
+    TEInit();
     
     FlushEvents(everyEvent, 0);
 }
@@ -37,7 +37,7 @@ void DoOpen() {
     
     winPtr = FrontWindow();
     teHndl = ((DocumentPeek)winPtr)->teHndl;
-    
+   
     if (gHasHFSPlusAPIs) {
         StandardGetFile(NULL, -1, NULL, &stdReply);
         
@@ -180,6 +180,7 @@ WindowPtr SetupWindow() {
    to functions that support >2GB file sizes. */
 void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
     ParamBlockRec       paramBlk;
+    FSRefParam          fsRefParam;
     FSRef               fsRef;
     FSForkIOParam       fsForkIOParam;
     HFSUniStr255        dataForkName;
@@ -211,18 +212,24 @@ void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
     
     /* Set the cursor to the end of the text */
     TESetSelect((*teHndl)->teLength, (*teHndl)->teLength, teHndl);
-    
+
     if (isHFSPlusReply) {
         stdReplyPtr = (StandardFileReply *)replyPtr;
-        FSpMakeFSRef(&stdReplyPtr->sfFile, &fsRef);
         FSGetDataForkName(&dataForkName);
+        
+        fsRefParam.ioNamePtr = stdReplyPtr->sfFile.name;
+        fsRefParam.ioVRefNum = stdReplyPtr->sfFile.vRefNum;
+        fsRefParam.ioDirID = stdReplyPtr->sfFile.parID;
+        fsRefParam.newRef = &fsRef;
+        
+        err = PBMakeFSRefSync(&fsRefParam);
         
         fsForkIOParam.ref = &fsRef;
         fsForkIOParam.forkNameLength = dataForkName.length;
         fsForkIOParam.forkName = dataForkName.unicode;
         fsForkIOParam.permissions = fsRdPerm;
         
-        err = PBOpenForkSync(&fsForkIOParam);        
+        err = PBOpenForkSync(&fsForkIOParam);
         
         myCopyPStr(stdReplyPtr->sfFile.name, filenamePStr);
         FSGetForkSize(fsForkIOParam.forkRefNum, &forkSize);
@@ -230,7 +237,7 @@ void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
         
         /* We use a working directory here for autosaving. SFReply is a working directory,
            not exactly a volume reference number, so we don't do it on non-HFS+ systems */
-        OpenWD(stdReplyPtr->sfFile.vRefNum, stdReplyPtr->sfFile.parID, NULL, &vRefNum);
+        OpenWD(stdReplyPtr->sfFile.vRefNum, stdReplyPtr->sfFile.parID, NULL, &vRefNum);        
     } else {
         sfReplyPtr = (SFReply *)replyPtr;
         
@@ -248,7 +255,7 @@ void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
         NumToString(logEOF, fileSizePStr);
         forkSize = logEOF;
         vRefNum = sfReplyPtr->vRefNum;
-    }
+    } 
     
     TEUpdate(&(*teHndl)->viewRect, teHndl);
     TEInsert(filenamePStr + 1, filenamePStr[0], teHndl);
@@ -318,7 +325,7 @@ void ProcessFile(void *replyPtr, Boolean isHFSPlusReply) {
             }
         
             TEInsert(bytesPerSecondPStr + 1, bytesPerSecondPStr[0], teHndl);
-            TEInsert(" bytes/sec)\r", 13, teHndl);            
+            TEInsert(" bytes/sec)\r", 13, teHndl);
         } else {
             TEInsert("\r", 2, teHndl);
         }
@@ -460,8 +467,7 @@ void EventLoop() {
                         case inZoomIn:
                         case inZoomOut:
                             if (TrackBox(winPtr, event.where, windowCode)) {
-                                ZoomWindow(winPtr, windowCode, winPtr == FrontWindow());
-                                DoResizeWindow(winPtr);
+                                DoZoomWindow(winPtr, windowCode);
                             }
                             
                             break;

@@ -24,9 +24,9 @@ enum {
     kDILeft		        = 112,
     
     /* Initial window size */
-    kWindowLeft         = 50,
+    kWindowLeft         = 15,
     kWindowTop          = 50,
-    kWindowRight        = 400,
+    kWindowRight        = 512 - 15,
     kWindowBottom       = 250,
     
     /* Window drag bounds */

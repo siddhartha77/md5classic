@@ -13,7 +13,7 @@ void SetupTE(WindowPtr winPtr) {
     TEPtr           tePtr;
     
     SetPort(winPtr);
-    TextFont(applFont);
+    TextFont(kFontIDMonaco);
     TextSize(9);    
     GetTERect(winPtr, &viewRect);
     destRect = viewRect;

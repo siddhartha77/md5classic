@@ -1,4 +1,5 @@
 #include "md5.h"
+#include "prefs.h"
 
 #define memcpy(d, s, l) BlockMove(s, d, l)
 #define memset(p, a, l) {unsigned long i; for (i = 0 ; i < (l) ; ++i) ((Ptr)(p))[i] = (a);}
@@ -477,11 +478,6 @@ static void MD5Final(unsigned char digest[16], MD5Context *ctx) {
     //memset(ctx, 0, sizeof(MD5Context));        /* In case it's sensitive */
 }
 
-pascal void IOComplete(FSForkIOParamPtr fsForkIOParamPtr) {
-#pragma unused (fsForkIOParamPtr)
-    gIOComplete = true;
-}
-
 /* This is a different version of the MD5MacFile function that adds the API
    calls to support >2GB file sizes */
 short MD5MacFileFork(FSForkIOParamPtr openFSForkPtr, unsigned char *result) {
@@ -492,26 +488,22 @@ short MD5MacFileFork(FSForkIOParamPtr openFSForkPtr, unsigned char *result) {
     char                currFSForkIndex = 0;
 	
 	MD5Init(&ctx);
-	
-	gIOComplete = false;
 		
 	fsForkPtr[0] = (FSForkIOParamPtr)NewPtrClear(sizeof(FSForkIOParam));
 	fsForkPtr[1] = (FSForkIOParamPtr)NewPtrClear(sizeof(FSForkIOParam));
 	SetupFSForkIOParam(fsForkPtr[0], openFSForkPtr, count);
 	SetupFSForkIOParam(fsForkPtr[1], openFSForkPtr, count);
-	
 	PBReadForkAsync(fsForkPtr[0]);
-	while (!gIOComplete && fsForkPtr[0]->ioResult > 0) {
-        Delay(1, NULL);
-    };
+	
+	/* Wait for the I/O operation to complete */
+	while (fsForkPtr[0]->ioResult > 0) {}
+    
 	PBReadForkAsync(fsForkPtr[1]);    	
 	currFSForkPtr = fsForkPtr[0];
 	
     while (true) {
 	    /* Wait for the I/O operation to complete */
-	    while (!gIOComplete && currFSForkPtr->ioResult > 0) {
-	        Delay(1, NULL);
-	    };
+	    while (currFSForkPtr->ioResult > 0) {}
 	    
 	    /* Data ready */
 	    
@@ -522,32 +514,11 @@ short MD5MacFileFork(FSForkIOParamPtr openFSForkPtr, unsigned char *result) {
 	    
 	    /* Checksum the data */   
         MD5Update(&ctx, (unsigned char *)currFSForkPtr->buffer, currFSForkPtr->actualCount);
-        
-#ifdef ALLOW_CANCEL
-        if (GetNextEvent(keyDownMask, &event)) {
-            switch (event.what) {
-                case keyDown:
-                    if ((event.message & charCodeMask) == kEscapeCharCode) {
-                      	DestroyFSForkIOParam(fsForkPtr[0]);
-                      	DestroyFSForkIOParam(fsForkPtr[1]);
-                          
-                        return 0;
-                    }
-                    
-                    break;
-                default:
-                    break;
-            }
-        }
-#endif
-	    
+
 	    /* Usually an eofErr (-43) will trigger this break */
         if (currFSForkPtr->ioResult < 0) {
             break;
         }
-	    
-	    /* Reset flag */
-	    gIOComplete = false;
 
     	/* Put the buffer back into the queue */
     	PBReadForkAsync(currFSForkPtr);
@@ -556,11 +527,12 @@ short MD5MacFileFork(FSForkIOParamPtr openFSForkPtr, unsigned char *result) {
     	currFSForkIndex = 1 - currFSForkIndex;
     	currFSForkPtr = fsForkPtr[currFSForkIndex];
 	}
-	
+
     DestroyFSForkIOParam(fsForkPtr[0]);
     DestroyFSForkIOParam(fsForkPtr[1]);
+
     MD5Final(result, &ctx);
-	
+
 	return 1;
 }
 
@@ -569,7 +541,7 @@ static void SetupFSForkIOParam(FSForkIOParamPtr readFSForkPtr, FSForkIOParamPtr 
     
     /* Any positive integer here will do */
     readFSForkPtr->ioResult = ioInProgress;
-    readFSForkPtr->ioCompletion = NewIOCompletionUPP(IOComplete);
+    readFSForkPtr->ioCompletion = NULL;
     readFSForkPtr->forkRefNum = openFSForkPtr->forkRefNum;
     readFSForkPtr->positionMode = fsAtMark;
     readFSForkPtr->positionOffset = 0LL;
@@ -596,8 +568,8 @@ short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result) {
 	SetupParamBlk(pbPtr[0], pbOpenBlkPtr, count);
 	SetupParamBlk(pbPtr[1], pbOpenBlkPtr, count);
 	
-	PBRead(pbPtr[0], true);
-	PBRead(pbPtr[1], true);
+	PBReadAsync(pbPtr[0]);
+	PBReadAsync(pbPtr[1]);
 	currPBPtr = pbPtr[0];
 	
 	while (true) {
@@ -613,27 +585,9 @@ short MD5MacFile(ParmBlkPtr pbOpenBlkPtr, unsigned char *result) {
 	    
 	    /* Checksum the data */   
         MD5Update(&ctx, (unsigned char *)currPBPtr->ioParam.ioBuffer, currPBPtr->ioParam.ioActCount);
-        
-#ifdef ALLOW_CANCEL
-        if (GetNextEvent(keyDownMask, &event)) {
-            switch (event.what) {
-                case keyDown:
-                    if ((event.message & charCodeMask) == kEscapeCharCode) {
-                      	DestroyParamBlk(pbPtr[0]);
-                      	DestroyParamBlk(pbPtr[1]);
-                          
-                        return 0;
-                    }
-                    
-                    break;
-                default:
-                    break;
-            }
-        }
-#endif
     	
     	/* Put the buffer back into the queue */
-    	PBRead(currPBPtr, true);
+    	PBReadAsync(currPBPtr);
     	
     	/* Switch to the other buffer */
     	currPBIndex = 1 - currPBIndex;
